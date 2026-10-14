@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Hub — Escape Rush & Void Escape</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #05050f;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Press Start 2P', monospace;
+  color: #ffffff;
+  padding: 40px 20px;
+}
+h1 {
+  font-size: clamp(14px, 3vw, 22px);
+  color: #00ff99;
+  text-align: center;
+  margin-bottom: 10px;
+  text-shadow: 0 0 20px #00ff9966;
+  letter-spacing: 2px;
+}
+.subtitle {
+  font-size: clamp(7px, 1.5vw, 10px);
+  color: #aaaaaa;
+  text-align: center;
+  margin-bottom: 50px;
+  letter-spacing: 1px;
+}
+.game-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 30px;
+  justify-content: center;
+  max-width: 900px;
+  width: 100%;
+}
+.game-card {
+  background: #0d0d1a;
+  border: 2px solid #00ff99;
+  border-radius: 8px;
+  padding: 30px 24px;
+  width: 380px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 0 24px #00ff9920;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.game-card:hover {
+  box-shadow: 0 0 40px #00ff9944;
+}
+.game-card.purple {
+  border-color: #a855f7;
+  box-shadow: 0 0 24px #a855f720;
+}
+.game-card.purple:hover {
+  box-shadow: 0 0 40px #a855f744;
+}
+.game-icon {
+  font-size: 48px;
+  line-height: 1;
+}
+.game-title {
+  font-size: clamp(11px, 2vw, 14px);
+  color: #00ff99;
+  text-align: center;
+  letter-spacing: 1px;
+}
+.game-card.purple .game-title {
+  color: #a855f7;
+}
+.game-desc {
+  font-size: clamp(6px, 1.2vw, 8px);
+  color: #cccccc;
+  text-align: center;
+  line-height: 1.8;
+  max-width: 300px;
+}
+.game-tag {
+  font-size: 7px;
+  color: #00ff99;
+  border: 1px solid #00ff9966;
+  border-radius: 3px;
+  padding: 4px 8px;
+  letter-spacing: 1px;
+}
+.game-card.purple .game-tag {
+  color: #a855f7;
+  border-color: #a855f766;
+}
+.play-btn {
+  display: inline-block;
+  background: #00ff9922;
+  border: 2px solid #00ff99;
+  color: #00ff99;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(9px, 1.5vw, 11px);
+  padding: 14px 28px;
+  text-decoration: none;
+  border-radius: 4px;
+  letter-spacing: 1px;
+  transition: background 0.15s;
+  margin-top: 4px;
+}
+.play-btn:hover {
+  background: #00ff9944;
+}
+.game-card.purple .play-btn {
+  background: #a855f722;
+  border-color: #a855f7;
+  color: #a855f7;
+}
+.game-card.purple .play-btn:hover {
+  background: #a855f744;
+}
+.footer {
+  margin-top: 50px;
+  font-size: 7px;
+  color: #555555;
+  text-align: center;
+  letter-spacing: 1px;
+}
+/* Scanline overlay */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.04) 2px,
+    rgba(0,0,0,0.04) 4px
+  );
+  pointer-events: none;
+  z-index: 100;
+}
+</style>
+</head>
+<body>
+
+<h1>&#127918; GAME HUB</h1>
+<p class="subtitle">SELECT YOUR GAME &mdash; BROWSER · NO INSTALL · FREE</p>
+
+<div class="game-grid">
+
+  <!-- Game 1 -->
+  <div class="game-card">
+    <div class="game-icon">&#127939;</div>
+    <div class="game-title">ESCAPE RUSH</div>
+    <div class="game-tag">PLATFORMER &bull; 3 LEVELS</div>
+    <p class="game-desc">
+      Run, jump, and dodge your way through 3 deadly levels.
+      Avoid moving blocks and spike traps. Reach the checkered flag to win.
+      Desktop &amp; mobile controls included.
+    </p>
+    <a href="index.html" class="play-btn">&#9654; PLAY NOW</a>
+  </div>
+
+  <!-- Game 2 -->
+  <div class="game-card purple">
+    <div class="game-icon">&#10024;</div>
+    <div class="game-title">VOID ESCAPE</div>
+    <div class="game-tag">DODGE &bull; 3 WAVES</div>
+    <p class="game-desc">
+      Survive 3 relentless waves of falling obstacles.
+      Move left and right to dodge the void. Stay alive to reach the safe zone.
+      Speed increases every wave.
+    </p>
+    <a href="game2.html" class="play-btn">&#9654; PLAY NOW</a>
+  </div>
+
+</div>
+
+<div class="footer">
+  PRESS START &mdash; BOTH GAMES LOAD IN UNDER 3 SECONDS &mdash; NO BACKEND REQUIRED
+</div>
+
+</body>
+</html>
