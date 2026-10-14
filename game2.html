@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Void Escape</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #05050f;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-family: 'Press Start 2P', monospace;
+  overflow: hidden;
+}
+#gameWrapper {
+  position: relative;
+  width: 480px;
+  max-width: 100vw;
+}
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 2px solid #a855f7;
+  box-shadow: 0 0 30px #a855f744;
+  image-rendering: pixelated;
+}
+#mobileControls {
+  display: none;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: #0d0d1a;
+  border: 2px solid #a855f7;
+  border-top: none;
+}
+.mBtn {
+  background: #1a0a2e;
+  border: 2px solid #a855f7;
+  color: #a855f7;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  padding: 14px 28px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  border-radius: 4px;
+}
+.mBtn:active { background: #a855f722; }
+@media (max-width: 820px) { #mobileControls { display: flex; } }
+</style>
+</head>
+<body>
+<div id="gameWrapper">
+  <canvas id="c" width="480" height="640"></canvas>
+  <div id="mobileControls">
+    <button class="mBtn" id="btnLeft">&#9664; LEFT</button>
+    <button class="mBtn" id="btnRight">RIGHT &#9654;</button>
+  </div>
+</div>
+<script>
+// ============================================================
+// VOID ESCAPE — Game 2
+// Dodge falling obstacles across 3 waves. Reach the SAFE ZONE.
+// Controls: Arrow Left/Right or A/D  |  Mobile: on-screen buttons
+// ============================================================
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 480, H = 640;
+
+// ---- PALETTE ----
+const COL = {
+  bg:        '#05050f',
+  stars:     '#ffffff',
+  ground:    '#1a0a2e',
+  player:    '#a855f7',
+  playerGlow:'#d8b4fe',
+  obstacle:  '#ff3366',
+  obstacleB: '#ff6688',
+  safeZone:  '#00ff99',
+  safeGlow:  '#00ff9944',
+  hud:       '#ffffff',
+  accent:    '#a855f7',
+  danger:    '#ff3366',
+  overlay:   'rgba(5,5,15,0.85)',
+  gold:      '#ffe066',
+};
+
+// ---- STARS (background) ----
+const STARS = Array.from({length: 80}, () => ({
+  x: Math.random() * W,
+  y: Math.random() * H,
+  r: Math.random() * 1.5 + 0.3,
+  a: Math.random()
+}));
+
+// ---- WAVE DEFINITIONS ----
+// Each wave: duration (frames), obstacle spawn rate, speed range, safe zone
+const WAVES = [
+  {
+    name: 'WAVE 1',
+    subtitle: 'INCOMING...',
+    duration: 600,          // ~10 seconds at 60fps
+    spawnRate: 55,          // spawn obstacle every N frames
+    speedMin: 2.5,
+    speedMax: 4.5,
+    obstacleW: 44,
+    count: 3,               // obstacles per spawn
+    safeY: H - 90,          // safe zone y position
+    safeH: 50,
+  },
+  {
+    name: 'WAVE 2',
+    subtitle: 'FASTER!',
+    duration: 700,
+    spawnRate: 40,
+    speedMin: 4,
+    speedMax: 6.5,
+    obstacleW: 40,
+    count: 4,
+    safeY: H - 90,
+    safeH: 50,
+  },
+  {
+    name: 'WAVE 3',
+    subtitle: 'SURVIVE!',
+    duration: 800,
+    spawnRate: 28,
+    speedMin: 5.5,
+    speedMax: 9,
+    obstacleW: 38,
+    count: 5,
+    safeY: H - 90,
+    safeH: 50,
+  },
+];
+
+// ---- PLAYER ----
+const PLAYER_W = 32;
+const PLAYER_H = 32;
+const PLAYER_SPEED = 5;
+const PLAYER_START_Y = H - 110;
+
+let player, obstacles, keys, state, currentWave, waveTimer, spawnTimer;
+let deaths, frameCount, safeTimer, safeNeeded, stars;
+
+function initGame() {
+  player = {
+    x: W / 2 - PLAYER_W / 2,
+    y: PLAYER_START_Y,
+    w: PLAYER_W,
+    h: PLAYER_H,
+  };
+  obstacles = [];
+  keys = {};
+  state = 'start';
+  currentWave = 0;
+  waveTimer = 0;
+  spawnTimer = 0;
+  deaths = 0;
+  frameCount = 0;
+  safeTimer = 0;
+  safeNeeded = 90; // frames to stay in safe zone to complete wave
+}
+
+initGame();
+
+// ---- INPUT ----
+document.addEventListener('keydown', e => { keys[e.key] = true; if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault(); });
+document.addEventListener('keyup',   e => { keys[e.key] = false; });
+
+// Mobile buttons
+const btnLeft  = document.getElementById('btnLeft');
+const btnRight = document.getElementById('btnRight');
+btnLeft.addEventListener('pointerdown',  () => { keys['ArrowLeft']  = true;  });
+btnLeft.addEventListener('pointerup',    () => { keys['ArrowLeft']  = false; });
+btnLeft.addEventListener('pointerleave', () => { keys['ArrowLeft']  = false; });
+btnRight.addEventListener('pointerdown',  () => { keys['ArrowRight'] = true;  });
+btnRight.addEventListener('pointerup',    () => { keys['ArrowRight'] = false; });
+btnRight.addEventListener('pointerleave', () => { keys['ArrowRight'] = false; });
+
+// Start/restart on Space or Enter
+document.addEventListener('keydown', e => {
+  if ((e.key === ' ' || e.key === 'Enter') && (state === 'start' || state === 'dead' || state === 'win')) {
+    startWave(0);
+  }
+});
+canvas.addEventListener('click', () => {
+  if (state === 'start' || state === 'dead' || state === 'win') startWave(0);
+});
+
+function startWave(idx) {
+  currentWave = idx;
+  waveTimer = 0;
+  spawnTimer = 0;
+  obstacles = [];
+  safeTimer = 0;
+  player.x = W / 2 - PLAYER_W / 2;
+  player.y = PLAYER_START_Y;
+  state = 'waveIntro';
+  frameCount = 0;
+}
+
+function spawnObstacles() {
+  const wave = WAVES[currentWave];
+  // Pick N random x positions without overlapping too much
+  let positions = [];
+  let attempts = 0;
+  while (positions.length < wave.count && attempts < 100) {
+    attempts++;
+    let x = Math.random() * (W - wave.obstacleW - 10) + 5;
+    // Ensure not too close to player
+    if (Math.abs(x + wave.obstacleW / 2 - (player.x + PLAYER_W / 2)) < 40 && positions.length > 0) continue;
+    // Ensure gap between obstacles
+    let ok = true;
+    for (let p of positions) {
+      if (Math.abs(x - p) < wave.obstacleW + 8) { ok = false; break; }
+    }
+    if (ok) positions.push(x);
+  }
+  let speed = wave.speedMin + Math.random() * (wave.speedMax - wave.speedMin);
+  for (let x of positions) {
+    // Vary height slightly so not all in a line
+    let h = 18 + Math.floor(Math.random() * 14);
+    obstacles.push({
+      x,
+      y: -h - Math.random() * 60,
+      w: wave.obstacleW,
+      h,
+      speed: speed + (Math.random() - 0.5) * 0.8,
+      glow: Math.random() > 0.6,
+    });
+  }
+}
+
+function rectOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x &&
+         a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function update() {
+  frameCount++;
+  const wave = WAVES[currentWave];
+
+  if (state === 'waveIntro') {
+    // Show wave name for 90 frames then begin
+    if (frameCount > 90) {
+      state = 'playing';
+      frameCount = 0;
+    }
+    return;
+  }
+
+  if (state !== 'playing') return;
+
+  // Move player
+  if (keys['ArrowLeft'] || keys['a'] || keys['A']) player.x -= PLAYER_SPEED;
+  if (keys['ArrowRight'] || keys['d'] || keys['D']) player.x += PLAYER_SPEED;
+  player.x = Math.max(0, Math.min(W - player.w, player.x));
+
+  // Spawn obstacles
+  spawnTimer++;
+  if (spawnTimer >= wave.spawnRate) {
+    spawnTimer = 0;
+    spawnObstacles();
+  }
+
+  // Move obstacles
+  for (let o of obstacles) o.y += o.speed;
+
+  // Remove off-screen obstacles
+  obstacles = obstacles.filter(o => o.y < H + 60);
+
+  // Collision with obstacles — shrink hitbox slightly for fairness
+  const pHit = { x: player.x + 4, y: player.y + 4, w: player.w - 8, h: player.h - 6 };
+  for (let o of obstacles) {
+    const oHit = { x: o.x + 2, y: o.y + 2, w: o.w - 4, h: o.h - 4 };
+    if (rectOverlap(pHit, oHit)) {
+      deaths++;
+      obstacles = [];
+      spawnTimer = 0;
+      safeTimer = 0;
+      waveTimer = 0;
+      frameCount = 0;
+      player.x = W / 2 - PLAYER_W / 2;
+      state = 'dead';
+      return;
+    }
+  }
+
+  // Safe zone check (player must stay in safe zone for safeNeeded frames)
+  const safeZoneRect = { x: 0, y: wave.safeY, w: W, h: wave.safeH };
+  const playerCenter = { x: player.x + PLAYER_W/2 - 4, y: player.y + PLAYER_H/2 - 4, w: 8, h: 8 };
+  if (rectOverlap(playerCenter, safeZoneRect)) {
+    safeTimer++;
+  } else {
+    safeTimer = Math.max(0, safeTimer - 2);
+  }
+
+  // Wave timer
+  waveTimer++;
+
+  // Win wave when safeTimer reaches safeNeeded
+  if (safeTimer >= safeNeeded) {
+    if (currentWave >= WAVES.length - 1) {
+      state = 'win';
+    } else {
+      // Next wave
+      currentWave++;
+      waveTimer = 0;
+      spawnTimer = 0;
+      obstacles = [];
+      safeTimer = 0;
+      player.x = W / 2 - PLAYER_W / 2;
+      player.y = PLAYER_START_Y;
+      state = 'waveIntro';
+      frameCount = 0;
+    }
+  }
+}
+
+// ---- DRAW HELPERS ----
+function drawStars() {
+  for (let s of STARS) {
+    ctx.globalAlpha = 0.3 + s.a * 0.7;
+    ctx.fillStyle = COL.stars;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawPlayer() {
+  const px = player.x, py = player.y;
+  // Glow
+  ctx.shadowColor = COL.player;
+  ctx.shadowBlur = 14;
+  // Body
+  ctx.fillStyle = COL.player;
+  ctx.fillRect(px, py, player.w, player.h);
+  // Visor
+  ctx.fillStyle = COL.playerGlow;
+  ctx.fillRect(px + 6, py + 7, player.w - 12, 8);
+  // Thruster flames
+  ctx.fillStyle = COL.gold;
+  ctx.fillRect(px + 10, py + player.h, 5, 6 + Math.floor(Math.random() * 4));
+  ctx.fillRect(px + 17, py + player.h, 5, 4 + Math.floor(Math.random() * 4));
+  ctx.shadowBlur = 0;
+}
+
+function drawObstacles() {
+  for (let o of obstacles) {
+    if (o.glow) {
+      ctx.shadowColor = COL.obstacle;
+      ctx.shadowBlur = 12;
+    }
+    // Main body
+    ctx.fillStyle = COL.obstacle;
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+    // Highlight strip
+    ctx.fillStyle = COL.obstacleB;
+    ctx.fillRect(o.x + 3, o.y + 3, o.w - 6, 5);
+    ctx.shadowBlur = 0;
+  }
+}
+
+function drawSafeZone() {
+  const wave = WAVES[currentWave];
+  // Pulsing safe zone
+  const pulse = 0.3 + 0.2 * Math.sin(frameCount * 0.1);
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = COL.safeZone;
+  ctx.fillRect(0, wave.safeY, W, wave.safeH);
+  ctx.globalAlpha = 1;
+  // Border
+  ctx.strokeStyle = COL.safeZone;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0, wave.safeY, W, wave.safeH);
+  // Label
+  ctx.fillStyle = COL.safeZone;
+  ctx.font = '7px "Press Start 2P"';
+  ctx.textAlign = 'center';
+  ctx.fillText('SAFE ZONE — HOLD POSITION', W / 2, wave.safeY + 20);
+  // Progress bar inside safe zone
+  if (safeTimer > 0) {
+    const pct = Math.min(safeTimer / safeNeeded, 1);
+    ctx.fillStyle = COL.safeZone;
+    ctx.fillRect(20, wave.safeY + 30, (W - 40) * pct, 8);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(20, wave.safeY + 30, W - 40, 8);
+  }
+}
+
+function drawHUD() {
+  const wave = WAVES[currentWave];
+  // Top bar
+  ctx.fillStyle = 'rgba(5,5,15,0.7)';
+  ctx.fillRect(0, 0, W, 36);
+  ctx.fillStyle = COL.accent;
+  ctx.font = '8px "Press Start 2P"';
+  ctx.textAlign = 'left';
+  ctx.fillText(wave.name, 12, 22);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = COL.danger;
+  ctx.fillText('DEATHS: ' + deaths, W - 12, 22);
+  // Wave dots
+  ctx.textAlign = 'center';
+  for (let i = 0; i < WAVES.length; i++) {
+    ctx.fillStyle = i <= currentWave ? COL.accent : '#333';
+    ctx.beginPath();
+    ctx.arc(W/2 - (WAVES.length-1)*12 + i*24, 18, 6, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+function drawOverlay(lines, subLines) {
+  ctx.fillStyle = COL.overlay;
+  ctx.fillRect(0, 0, W, H);
+  let y = H / 2 - (lines.length * 28 + (subLines ? subLines.length * 22 : 0)) / 2;
+  for (let l of lines) {
+    ctx.fillStyle = l.color || COL.hud;
+    ctx.font = (l.size || 14) + 'px "Press Start 2P"';
+    ctx.textAlign = 'center';
+    ctx.fillText(l.text, W / 2, y);
+    y += (l.size || 14) + 18;
+  }
+  if (subLines) {
+    y += 8;
+    for (let s of subLines) {
+      ctx.fillStyle = s.color || '#aaa';
+      ctx.font = (s.size || 8) + 'px "Press Start 2P"';
+      ctx.textAlign = 'center';
+      ctx.fillText(s.text, W / 2, y);
+      y += (s.size || 8) + 16;
+    }
+  }
+}
+
+function draw() {
+  // Background
+  ctx.fillStyle = COL.bg;
+  ctx.fillRect(0, 0, W, H);
+  drawStars();
+
+  if (state === 'start') {
+    drawOverlay(
+      [
+        { text: 'VOID ESCAPE', color: COL.accent, size: 18 },
+        { text: '— GAME 2 —', color: '#555', size: 8 },
+      ],
+      [
+        { text: 'DODGE FALLING ASTEROIDS', color: COL.hud, size: 8 },
+        { text: 'REACH THE SAFE ZONE', color: COL.safeZone, size: 8 },
+        { text: 'TO COMPLETE EACH WAVE', color: COL.safeZone, size: 8 },
+        { text: '', size: 4 },
+        { text: '\u2190 \u2192  OR  A / D  TO MOVE', color: '#888', size: 7 },
+        { text: '', size: 4 },
+        { text: 'PRESS SPACE OR CLICK', color: COL.gold, size: 8 },
+        { text: 'TO START', color: COL.gold, size: 8 },
+      ]
+    );
+    return;
+  }
+
+  if (state === 'waveIntro') {
+    const wave = WAVES[currentWave];
+    drawOverlay(
+      [
+        { text: wave.name, color: COL.accent, size: 20 },
+        { text: wave.subtitle, color: COL.danger, size: 10 },
+      ],
+      [
+        { text: 'DODGE ALL OBSTACLES', color: COL.hud, size: 8 },
+        { text: 'REACH THE SAFE ZONE', color: COL.safeZone, size: 8 },
+      ]
+    );
+    return;
+  }
+
+  if (state === 'playing') {
+    drawSafeZone();
+    drawObstacles();
+    drawPlayer();
+    drawHUD();
+    return;
+  }
+
+  if (state === 'dead') {
+    drawSafeZone();
+    drawObstacles();
+    drawPlayer();
+    drawHUD();
+    drawOverlay(
+      [
+        { text: 'DESTROYED!', color: COL.danger, size: 16 },
+      ],
+      [
+        { text: 'YOU HIT AN ASTEROID', color: COL.hud, size: 8 },
+        { text: 'DEATHS: ' + deaths, color: COL.danger, size: 9 },
+        { text: '', size: 4 },
+        { text: 'PRESS SPACE TO RETRY', color: COL.gold, size: 8 },
+      ]
+    );
+    return;
+  }
+
+  if (state === 'win') {
+    ctx.fillStyle = COL.bg;
+    ctx.fillRect(0, 0, W, H);
+    drawStars();
+    drawOverlay(
+      [
+        { text: 'YOU ESCAPED!', color: COL.safeZone, size: 16 },
+        { text: 'ALL 3 WAVES CLEARED', color: COL.accent, size: 9 },
+      ],
+      [
+        { text: 'TOTAL DEATHS: ' + deaths, color: deaths === 0 ? COL.gold : COL.danger, size: 9 },
+        { text: deaths === 0 ? 'PERFECT RUN!' : 'WELL DONE PILOT', color: COL.gold, size: 8 },
+        { text: '', size: 4 },
+        { text: 'PRESS SPACE TO PLAY AGAIN', color: '#888', size: 7 },
+      ]
+    );
+    return;
+  }
+}
+
+// ---- GAME LOOP ----
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
