@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Escape Rush</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0f;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-family: 'Press Start 2P', monospace;
+  overflow: hidden;
+}
+#gameWrapper {
+  position: relative;
+  width: 800px;
+  max-width: 100vw;
+}
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 2px solid #00ff99;
+  box-shadow: 0 0 30px #00ff9944;
+  image-rendering: pixelated;
+}
+#mobileControls {
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background: #12121a;
+  border: 2px solid #00ff99;
+  border-top: none;
+}
+.mobileBtn {
+  background: #1a1a2e;
+  border: 2px solid #00ff99;
+  color: #00ff99;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  padding: 14px 20px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  border-radius: 4px;
+  min-width: 70px;
+  text-align: center;
+}
+.mobileBtn:active { background: #00ff9922; }
+@media (max-width: 820px) {
+  #mobileControls { display: flex; }
+}
+@media (max-width: 600px) {
+  .mobileBtn { font-size: 8px; padding: 12px 14px; min-width: 55px; }
+}
+</style>
+</head>
+<body>
+<div id="gameWrapper">
+  <canvas id="gameCanvas" width="800" height="400"></canvas>
+  <div id="mobileControls">
+    <button class="mobileBtn" id="btnLeft">&#9664; LEFT</button>
+    <button class="mobileBtn" id="btnJump">&#9650; JUMP</button>
+    <button class="mobileBtn" id="btnRight">RIGHT &#9654;</button>
+  </div>
+</div>
+<script>
+// ============================================================
+// ESCAPE RUSH — Main Game Script
+// Controls: Arrow Keys / WASD / Space to jump
+// ============================================================
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// ---- CONSTANTS ----
+const W = 800, H = 400;
+const GROUND_Y = 340;
+const GRAVITY = 0.6;
+const JUMP_VEL = -14;
+const WALK_SPEED = 4;
+const MAX_FALL = 12;
+const PLAYER_W = 28, PLAYER_H = 36;
+const CAM_TARGET_X = 200;
+
+// ---- COLOURS ----
+const C = {
+  bg: '#0a0a0f',
+  ground: '#1a1a2e',
+  groundLine: '#00ff99',
+  player: '#00ff99',
+  playerEye: '#0a0a0f',
+  obstacle: '#ff3366',
+  spike: '#ff3366',
+  finish: '#ffe066',
+  hudText: '#ffffff',
+  hudAccent: '#00ff99',
+  overlay: 'rgba(10,10,15,0.82)',
+  titleColor: '#00ff99',
+  dangerText: '#ff3366',
+  warnText: '#ffe066',
+  platformColor: '#2a2a4a',
+};
+
+// ---- LEVEL DEFINITIONS ----
+const LEVELS = [
+  // LEVEL 1 — The Warm-Up
+  {
+    name: 'THE WARM-UP',
+    worldWidth: 2400,
+    platforms: [
+      { x: 300, y: 280, w: 120, h: 16 },
+      { x: 560, y: 260, w: 120, h: 16 },
+      { x: 820, y: 240, w: 140, h: 16 },
+      { x: 1100, y: 270, w: 120, h: 16 },
+      { x: 1400, y: 250, w: 140, h: 16 },
+      { x: 1700, y: 260, w: 120, h: 16 },
+      { x: 1980, y: 240, w: 140, h: 16 },
+    ],
+    obstacles: [
+      { x: 450, y: GROUND_Y - 30, w: 30, h: 30, speed: 1.5, dir: 1, range: 80 },
+      { x: 750, y: GROUND_Y - 30, w: 30, h: 30, speed: 1.5, dir: -1, range: 80 },
+      { x: 1050, y: GROUND_Y - 30, w: 30, h: 30, speed: 2, dir: 1, range: 100 },
+      { x: 1350, y: GROUND_Y - 30, w: 30, h: 30, speed: 2, dir: -1, range: 100 },
+      { x: 1650, y: GROUND_Y - 30, w: 30, h: 30, speed: 2, dir: 1, range: 80 },
+    ],
+    spikes: [
+      { x: 600, w: 30 }, { x: 900, w: 30 }, { x: 1200, w: 30 },
+      { x: 1500, w: 30 }, { x: 1800, w: 30 }, { x: 2100, w: 30 },
+    ],
+    finishX: 2300,
+  },
+  // LEVEL 2 — Picking Up Speed
+  {
+    name: 'PICKING UP SPEED',
+    worldWidth: 2800,
+    platforms: [
+      { x: 250, y: 270, w: 100, h: 16 }, { x: 480, y: 245, w: 100, h: 16 },
+      { x: 700, y: 220, w: 100, h: 16 }, { x: 950, y: 250, w: 110, h: 16 },
+      { x: 1200, y: 230, w: 110, h: 16 }, { x: 1480, y: 210, w: 120, h: 16 },
+      { x: 1750, y: 240, w: 110, h: 16 }, { x: 2020, y: 220, w: 120, h: 16 },
+      { x: 2300, y: 250, w: 110, h: 16 },
+    ],
+    obstacles: [
+      { x: 380, y: GROUND_Y - 30, w: 32, h: 32, speed: 2.5, dir: 1, range: 90 },
+      { x: 620, y: GROUND_Y - 30, w: 32, h: 32, speed: 2.5, dir: -1, range: 90 },
+      { x: 860, y: GROUND_Y - 30, w: 32, h: 32, speed: 3, dir: 1, range: 100 },
+      { x: 1100, y: GROUND_Y - 30, w: 32, h: 32, speed: 3, dir: -1, range: 100 },
+      { x: 1380, y: GROUND_Y - 30, w: 32, h: 32, speed: 3.2, dir: 1, range: 110 },
+      { x: 1640, y: GROUND_Y - 30, w: 32, h: 32, speed: 3.2, dir: -1, range: 110 },
+      { x: 1900, y: GROUND_Y - 30, w: 32, h: 32, speed: 3.5, dir: 1, range: 120 },
+      { x: 2150, y: GROUND_Y - 30, w: 32, h: 32, speed: 3.5, dir: -1, range: 80 },
+    ],
+    spikes: [
+      { x: 500, w: 30 }, { x: 700, w: 30 }, { x: 970, w: 30 },
+      { x: 1250, w: 30 }, { x: 1550, w: 30 }, { x: 1820, w: 30 },
+      { x: 2050, w: 30 }, { x: 2350, w: 30 }, { x: 2550, w: 30 },
+    ],
+    finishX: 2700,
+  },
+  // LEVEL 3 — Full Sprint
+  {
+    name: 'FULL SPRINT',
+    worldWidth: 3200,
+    platforms: [
+      { x: 200, y: 265, w: 90, h: 16 }, { x: 400, y: 240, w: 90, h: 16 },
+      { x: 600, y: 215, w: 90, h: 16 }, { x: 820, y: 235, w: 90, h: 16 },
+      { x: 1040, y: 210, w: 100, h: 16 }, { x: 1280, y: 230, w: 90, h: 16 },
+      { x: 1520, y: 200, w: 100, h: 16 }, { x: 1780, y: 220, w: 90, h: 16 },
+      { x: 2040, y: 205, w: 100, h: 16 }, { x: 2300, y: 225, w: 90, h: 16 },
+      { x: 2560, y: 210, w: 100, h: 16 }, { x: 2820, y: 230, w: 90, h: 16 },
+    ],
+    obstacles: [
+      { x: 320,  y: GROUND_Y - 32, w: 34, h: 34, speed: 3.5, dir: 1,  range: 90  },
+      { x: 520,  y: GROUND_Y - 32, w: 34, h: 34, speed: 3.5, dir: -1, range: 90  },
+      { x: 740,  y: GROUND_Y - 32, w: 34, h: 34, speed: 4,   dir: 1,  range: 100 },
+      { x: 960,  y: GROUND_Y - 32, w: 34, h: 34, speed: 4,   dir: -1, range: 100 },
+      { x: 1200, y: GROUND_Y - 32, w: 34, h: 34, speed: 4.2, dir: 1,  range: 110 },
+      { x: 1440, y: GROUND_Y - 32, w: 34, h: 34, speed: 4.2, dir: -1, range: 110 },
+      { x: 1700, y: GROUND_Y - 32, w: 34, h: 34, speed: 4.5, dir: 1,  range: 120 },
+      { x: 1960, y: GROUND_Y - 32, w: 34, h: 34, speed: 4.5, dir: -1, range: 120 },
+      { x: 2220, y: GROUND_Y - 32, w: 34, h: 34, speed: 5,   dir: 1,  range: 130 },
+      { x: 2480, y: GROUND_Y - 32, w: 34, h: 34, speed: 5,   dir: -1, range: 130 },
+      { x: 2740, y: GROUND_Y - 32, w: 34, h: 34, speed: 5.5, dir: 1,  range: 100 },
+    ],
+    spikes: [
+      { x: 420, w: 30 }, { x: 650, w: 30 }, { x: 880, w: 30 },
+      { x: 1110, w: 30 }, { x: 1360, w: 30 }, { x: 1600, w: 30 },
+      { x: 1860, w: 30 }, { x: 2120, w: 30 }, { x: 2380, w: 30 },
+      { x: 2640, w: 30 }, { x: 2900, w: 30 }, { x: 3050, w: 30 },
+    ],
+    finishX: 3100,
+  },
+];
+
+// ---- GAME STATE ----
+let state = 'start';
+let currentLevel = 0;
+let deaths = 0;
+let timer = 0;
+let frameCount = 0;
+let levelFlashTimer = 0;
+let camX = 0;
+
+// ---- PLAYER ----
+let player = {};
+function resetPlayer() {
+  player = { x: 60, y: GROUND_Y - PLAYER_H, vx: 0, vy: 0, onGround: false, alive: true, _jumpHeld: false };
+  camX = 0;
+}
+
+let obstacles = [], spikes = [], platforms = [], finishX = 0;
+
+function loadLevel(idx) {
+  const lvl = LEVELS[idx];
+  finishX = lvl.finishX;
+  platforms = lvl.platforms.map(p => ({ ...p }));
+  spikes = lvl.spikes.map(s => ({ ...s }));
+  obstacles = lvl.obstacles.map(o => ({ ...o, originX: o.x }));
+  resetPlayer();
+  timer = 0;
+  frameCount = 0;
+}
+
+// ---- INPUT ----
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['Space','ArrowUp','ArrowLeft','ArrowRight','ArrowDown'].includes(e.code)) e.preventDefault();
+  if (state === 'start' && (e.code === 'Space' || e.code === 'Enter')) startGame();
+  if (state === 'dead' && (e.code === 'Space' || e.code === 'Enter')) restartLevel();
+  if (state === 'win' && (e.code === 'Space' || e.code === 'Enter')) { currentLevel = 0; deaths = 0; startGame(); }
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+const mobileState = { left: false, right: false, jump: false };
+function addMobileBtn(id, prop) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.addEventListener('touchstart', e => { e.preventDefault(); mobileState[prop] = true; if (state !== 'playing') handleScreenTap(); }, { passive: false });
+  btn.addEventListener('touchend',  e => { e.preventDefault(); mobileState[prop] = false; }, { passive: false });
+  btn.addEventListener('mousedown', () => { mobileState[prop] = true; });
+  btn.addEventListener('mouseup',   () => { mobileState[prop] = false; });
+  btn.addEventListener('mouseleave',() => { mobileState[prop] = false; });
+}
+addMobileBtn('btnLeft', 'left');
+addMobileBtn('btnRight', 'right');
+addMobileBtn('btnJump', 'jump');
+
+function handleScreenTap() {
+  if (state === 'start') startGame();
+  else if (state === 'dead') restartLevel();
+  else if (state === 'win') { currentLevel = 0; deaths = 0; startGame(); }
+}
+cavas_tap: canvas.addEventListener('touchstart', e => { e.preventDefault(); handleScreenTap(); }, { passive: false });
+
+// ---- GAME FLOW ----
+function startGame() { currentLevel = 0; deaths = 0; loadLevel(0); state = 'playing'; }
+function restartLevel() { loadLevel(currentLevel); state = 'playing'; }
+function die() { if (!player.alive) return; player.alive = false; deaths++; state = 'dead'; }
+function completeLevel() { state = 'levelComplete'; levelFlashTimer = 120; }
+
+// ---- AABB COLLISION ----
+function aabb(ax, ay, aw, ah, bx, by, bw, bh) {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+// ---- UPDATE ----
+function update() {
+  if (state !== 'playing') return;
+  frameCount++;
+  if (frameCount % 60 === 0) timer++;
+  const goLeft  = keys['ArrowLeft']  || keys['KeyA'] || mobileState.left;
+  const goRight = keys['ArrowRight'] || keys['KeyD'] || mobileState.right;
+  const doJump  = keys['ArrowUp']    || keys['KeyW'] || keys['Space'] || mobileState.jump;
+  player.vx = goLeft ? -WALK_SPEED : goRight ? WALK_SPEED : 0;
+  if (doJump && player.onGround && !player._jumpHeld) {
+    player.vy = JUMP_VEL; player.onGround = false; player._jumpHeld = true;
+  }
+  if (!doJump) player._jumpHeld = false;
+  player.vy = Math.min(player.vy + GRAVITY, MAX_FALL);
+  player.x += player.vx;
+  player.x = Math.max(0, Math.min(player.x, LEVELS[currentLevel].worldWidth - PLAYER_W));
+  player.y += player.vy;
+  player.onGround = false;
+  if (player.y + PLAYER_H >= GROUND_Y) { player.y = GROUND_Y - PLAYER_H; player.vy = 0; player.onGround = true; }
+  for (const p of platforms) {
+    if (aabb(player.x, player.y, PLAYER_W, PLAYER_H, p.x, p.y, p.w, p.h)) {
+      const prevBottom = player.y + PLAYER_H - player.vy;
+      if (prevBottom <= p.y + 2 && player.vy >= 0) { player.y = p.y - PLAYER_H; player.vy = 0; player.onGround = true; }
+    }
+  }
+  if (player.y > H + 100) { die(); return; }
+  for (const o of obstacles) {
+    o.x += o.speed * o.dir;
+    if (o.x > o.originX + o.range || o.x < o.originX - o.range) o.dir *= -1;
+    if (aabb(player.x, player.y, PLAYER_W, PLAYER_H, o.x, o.y, o.w, o.h)) { die(); return; }
+  }
+  for (const s of spikes) {
+    if (aabb(player.x, player.y, PLAYER_W, PLAYER_H, s.x, GROUND_Y - 20, s.w, 20)) { die(); return; }
+  }
+  if (player.x + PLAYER_W >= finishX) {
+    if (currentLevel < LEVELS.length - 1) { currentLevel++; loadLevel(currentLevel); completeLevel(); }
+    else state = 'win';
+    return;
+  }
+  camX = Math.max(0, Math.min(player.x - CAM_TARGET_X, LEVELS[currentLevel].worldWidth - W));
+}
+
+function updateLevelComplete() {
+  if (state !== 'levelComplete') return;
+  levelFlashTimer--;
+  if (levelFlashTimer <= 0) state = 'playing';
+}
+
+// ---- DRAW HELPERS ----
+function drawBackground() {
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  [[50,30],[120,80],[200,20],[340,60],[470,40],[600,25],[700,70],[760,15],[80,150],[250,130],[450,110],[680,140]].forEach(([sx,sy]) => ctx.fillRect(sx,sy,2,2));
+}
+function drawGround() {
+  ctx.fillStyle = C.ground; ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+  ctx.strokeStyle = C.groundLine; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, GROUND_Y); ctx.lineTo(W, GROUND_Y); ctx.stroke();
+  ctx.strokeStyle = '#1e1e3a'; ctx.lineWidth = 1;
+  const off = camX % 80;
+  for (let tx = -off; tx < W; tx += 80) {
+    ctx.beginPath(); ctx.moveTo(tx, GROUND_Y); ctx.lineTo(tx, H); ctx.stroke();
+  }
+}
+function drawPlatforms() {
+  for (const p of platforms) {
+    const sx = p.x - camX; if (sx + p.w < 0 || sx > W) continue;
+    ctx.fillStyle = C.platformColor; ctx.fillRect(sx, p.y, p.w, p.h);
+    ctx.strokeStyle = C.groundLine; ctx.lineWidth = 1.5; ctx.strokeRect(sx, p.y, p.w, p.h);
+    ctx.fillStyle = '#3a3a6a'; ctx.fillRect(sx, p.y, p.w, 3);
+  }
+}
+function drawObstacles() {
+  for (const o of obstacles) {
+    const sx = o.x - camX; if (sx + o.w < 0 || sx > W) continue;
+    ctx.fillStyle = C.obstacle; ctx.fillRect(sx, o.y, o.w, o.h);
+    ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(sx+2, o.y+2, o.w-4, 6);
+    ctx.fillStyle = '#0a0a0f'; ctx.fillRect(sx+6, o.y+8, 5, 5); ctx.fillRect(sx+o.w-11, o.y+8, 5, 5);
+    ctx.strokeStyle = '#0a0a0f'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(sx+4,o.y+6); ctx.lineTo(sx+12,o.y+9);
+    ctx.moveTo(sx+o.w-4,o.y+6); ctx.lineTo(sx+o.w-12,o.y+9); ctx.stroke();
+  }
+}
+function drawSpikes() {
+  for (const s of spikes) {
+    const sx = s.x - camX; if (sx + s.w < 0 || sx > W) continue;
+    ctx.fillStyle = C.spike;
+    ctx.beginPath(); ctx.moveTo(sx, GROUND_Y); ctx.lineTo(sx + s.w/2, GROUND_Y - 20); ctx.lineTo(sx + s.w, GROUND_Y); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#ff6688'; ctx.lineWidth = 1; ctx.stroke();
+  }
+}
+function drawFinishLine() {
+  const sx = finishX - camX; if (sx > W || sx + 56 < 0) return;
+  ctx.strokeStyle = C.finish; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(sx, GROUND_Y); ctx.lineTo(sx, GROUND_Y - 100); ctx.stroke();
+  const fx = sx + 3, fy = GROUND_Y - 100;
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 6; c++) {
+    ctx.fillStyle = (r + c) % 2 === 0 ? '#ffffff' : '#000000';
+    ctx.fillRect(fx + c*8, fy + r*8, 8, 8);
+  }
+  ctx.strokeStyle = C.finish; ctx.lineWidth = 1; ctx.strokeRect(fx, fy, 48, 32);
+  ctx.fillStyle = C.finish; ctx.font = '8px "Press Start 2P",monospace'; ctx.textAlign = 'center';
+  ctx.fillText('FINISH', sx + 27, GROUND_Y - 108);
+}
+function drawPlayer() {
+  const sx = player.x - camX, sy = player.y;
+  ctx.fillStyle = C.player; ctx.fillRect(sx, sy, PLAYER_W, PLAYER_H);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(sx + PLAYER_W - 6, sy, 6, PLAYER_H);
+  ctx.fillStyle = C.playerEye; ctx.fillRect(sx+16, sy+8, 6, 6);
+  ctx.fillStyle = C.player; ctx.fillRect(sx+18, sy+10, 2, 2);
+  ctx.fillStyle = C.playerEye; ctx.fillRect(sx+14, sy+20, 10, 3);
+  const lp = Math.floor(frameCount/6) % 2;
+  ctx.fillStyle = '#00cc77';
+  if (player.onGround && player.vx !== 0) {
+    ctx.fillRect(sx+4, sy+PLAYER_H+(lp?-4:0), 8, 8);
+    ctx.fillRect(sx+16, sy+PLAYER_H+(lp?0:-4), 8, 8);
+  } else {
+    ctx.fillRect(sx+4, sy+PLAYER_H, 8, 8); ctx.fillRect(sx+16, sy+PLAYER_H, 8, 8);
+  }
+}
+function drawHUD() {
+  ctx.fillStyle = C.hudAccent; ctx.font = '9px "Press Start 2P",monospace'; ctx.textAlign = 'left';
+  ctx.fillText('LVL ' + (currentLevel+1) + '  ' + LEVELS[currentLevel].name, 12, 22);
+  ctx.fillStyle = C.hudText; ctx.textAlign = 'right';
+  ctx.fillText(String(Math.floor(timer/60)).padStart(2,'0') + ':' + String(timer%60).padStart(2,'0'), W-12, 22);
+  ctx.fillStyle = C.dangerText; ctx.fillText('Deaths: ' + deaths, W-12, 38);
+  const prog = Math.min(1, player.x / finishX);
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(12, 32, 200, 8);
+  ctx.fillStyle = C.hudAccent; ctx.fillRect(12, 32, 200*prog, 8);
+  ctx.strokeStyle = C.hudAccent; ctx.lineWidth = 1; ctx.strokeRect(12, 32, 200, 8);
+}
+function txt(text, y, size, color, shadow) {
+  ctx.font = size + 'px "Press Start 2P",monospace'; ctx.textAlign = 'center';
+  if (shadow) { ctx.fillStyle = shadow; ctx.fillText(text, W/2+2, y+2); }
+  ctx.fillStyle = color; ctx.fillText(text, W/2, y);
+}
+function drawBtn(label, cy, bw, bh) {
+  const bx = W/2-bw/2, by = cy-bh/2;
+  ctx.fillStyle = '#1a1a2e'; ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = C.hudAccent; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, bh);
+  ctx.fillStyle = C.hudAccent; ctx.font = '11px "Press Start 2P",monospace'; ctx.textAlign = 'center';
+  ctx.fillText(label, W/2, cy+4);
+}
+function drawStartScreen() {
+  drawBackground();
+  ctx.shadowColor='#00ff99'; ctx.shadowBlur=20;
+  txt('ESCAPE RUSH', 130, 30, C.titleColor, '#003322');
+  ctx.shadowBlur=0;
+  txt('"Can you outrun them all?"', 168, 8, '#aaaaaa');
+  ctx.fillStyle=C.player; ctx.fillRect(W/2-14,193,28,36);
+  ctx.fillStyle=C.playerEye; ctx.fillRect(W/2+2,201,6,6);
+  ctx.fillStyle=C.obstacle; ctx.fillRect(W/2+60,200,34,30);
+  ctx.fillStyle='#0a0a0f'; ctx.fillRect(W/2+68,208,5,5); ctx.fillRect(W/2+79,208,5,5);
+  txt('ARROWS / WASD  to move', 263, 7, '#888888');
+  txt('UP / SPACE  to jump', 280, 7, '#888888');
+  txt('3 LEVELS  •  REACH THE FLAG  •  SURVIVE', 302, 7, '#555566');
+  drawBtn('▶  PLAY', 350, 160, 34);
+  txt('PRESS SPACE TO START', 392, 7, '#555566');
+}
+function drawDeadScreen() {
+  ctx.fillStyle = C.overlay; ctx.fillRect(0,0,W,H);
+  ctx.shadowColor=C.dangerText; ctx.shadowBlur=18;
+  txt('YOU DIED', H/2-50, 26, C.dangerText, '#330011');
+  ctx.shadowBlur=0;
+  txt('DEATHS: '+deaths, H/2-10, 10, '#ffffff');
+  drawBtn('↺  RESTART', H/2+45, 180, 36);
+  txt('PRESS SPACE TO RETRY', H/2+90, 7, '#555566');
+}
+function drawLevelCompleteScreen() {
+  const alpha = Math.min(1, levelFlashTimer/30);
+  ctx.fillStyle = 'rgba(10,10,15,'+(0.7*alpha)+')';
+  ctx.fillRect(0,0,W,H);
+  ctx.globalAlpha = alpha;
+  ctx.shadowColor=C.warnText; ctx.shadowBlur=25;
+  txt('LEVEL COMPLETE!', H/2-20, 20, C.warnText, '#332200');
+  ctx.shadowBlur=0;
+  txt('LEVEL '+(currentLevel+1)+' UP NEXT...', H/2+20, 9, '#aaaaaa');
+  ctx.globalAlpha=1;
+}
+function drawWinScreen() {
+  drawBackground();
+  ctx.shadowColor=C.hudAccent; ctx.shadowBlur=25;
+  txt('YOU ESCAPED!', 110, 26, C.hudAccent, '#003322');
+  ctx.shadowBlur=0;
+  ctx.font='48px monospace'; ctx.textAlign='center'; ctx.fillText('🏆', W/2, 185);
+  txt('TIME: '+String(Math.floor(timer/60)).padStart(2,'0')+':'+String(timer%60).padStart(2,'0'), 215, 10, C.warnText);
+  txt('DEATHS: '+deaths, 238, 10, C.dangerText);
+  txt('CONGRATULATIONS!', 268, 9, '#aaaaaa');
+  drawBtn('▶  PLAY AGAIN', 320, 210, 36);
+  txt('PRESS SPACE TO REPLAY', 380, 7, '#555566');
+}
+
+// ---- MAIN LOOP ----
+function gameLoop() {
+  ctx.clearRect(0,0,W,H);
+  if (state === 'start') {
+    drawStartScreen();
+  } else if (state === 'playing' || state === 'levelComplete') {
+    update(); updateLevelComplete();
+    drawBackground(); drawGround(); drawPlatforms();
+    drawSpikes(); drawObstacles(); drawFinishLine(); drawPlayer(); drawHUD();
+    if (state === 'levelComplete') drawLevelCompleteScreen();
+  } else if (state === 'dead') {
+    drawBackground(); drawGround(); drawPlatforms();
+    drawSpikes(); drawObstacles(); drawFinishLine(); drawPlayer(); drawHUD();
+    drawDeadScreen();
+  } else if (state === 'win') {
+    drawWinScreen();
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+// Kick off!
+gameLoop();
+</script>
+</body>
+</html>
